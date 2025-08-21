@@ -99,7 +99,7 @@ st.markdown("""
 
 # Sidebar menu
 st.sidebar.title("Menu")
-menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Điểm Danh", "Báo Cáo"])
+menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Điểm Danh", "Báo Cáo"], index=1)
 
 if menu == "Import Dữ Liệu":
     st.title("Import Dữ Liệu Học Sinh")
