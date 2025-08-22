@@ -3,6 +3,8 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 import os
+import io
+import shutil
 
 # Kết nối database SQLite
 conn = sqlite3.connect('diem_danh.db')
@@ -60,7 +62,7 @@ st.markdown("""
 <style>
 .stSelectbox > div > div > div {
     font-size: 16px !important;
-    padding: 10px 20px !important; /* Tăng padding để canh giữa */
+    padding: 10px 20px !important;
     min-height: 60px !important;
     min-width: 100px !important;
     display: flex !important;
@@ -94,12 +96,19 @@ st.markdown("""
 .stDataFrame {
     width: 100% !important;
 }
+.stDataEditor {
+    width: 100% !important;
+}
+.stDataEditor th, .stDataEditor td {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # Sidebar menu
 st.sidebar.title("Menu")
-menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Điểm Danh", "Báo Cáo"], index=1)
+menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Sửa Danh Sách Lớp", "Điểm Danh", "Báo Cáo", "Backup/Restore"], index=2)
 
 if menu == "Import Dữ Liệu":
     st.title("Import Dữ Liệu Học Sinh")
@@ -139,6 +148,39 @@ if menu == "Import Dữ Liệu":
             conn.commit()
             st.success("Import thành công!")
 
+elif menu == "Sửa Danh Sách Lớp":
+    st.title("Sửa Danh Sách Lớp")
+    lop = st.selectbox("Chọn lớp để sửa", tat_ca_lop)
+    loai_lop = get_loai_lop(lop)
+    
+    # Khởi tạo session state cho dữ liệu tạm thời
+    if f"edited_df_{lop}" not in st.session_state:
+        c.execute("SELECT id, ho, ten, lop_chinh_thuc, ghi_chu FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
+        data = c.fetchall()
+        if data:
+            st.session_state[f"edited_df_{lop}"] = pd.DataFrame(data, columns=['ID', 'Họ', 'Tên', 'Lớp', 'Ghi chú']).drop(columns=['ID'])
+        else:
+            st.session_state[f"edited_df_{lop}"] = pd.DataFrame(columns=['Họ', 'Tên', 'Lớp', 'Ghi chú'])
+    
+    # Sử dụng dữ liệu từ session state
+    edited_df = st.data_editor(st.session_state[f"edited_df_{lop}"], num_rows="dynamic", key=f"editor_{lop}")
+    
+    # Cập nhật session state ngay khi có thay đổi
+    st.session_state[f"edited_df_{lop}"] = edited_df
+    
+    if st.button("Lưu Thay Đổi"):
+        # Lưu vào database
+        c.execute("DELETE FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
+        for _, row in edited_df.iterrows():
+            ho = row['Họ'] if pd.notna(row['Họ']) else ''
+            ten = row['Tên'] if pd.notna(row['Tên']) else ''
+            lop_chinh = row['Lớp'] if loai_lop != 'chinh_thuc' and pd.notna(row['Lớp']) else lop
+            ghi_chu = row['Ghi chú'] if pd.notna(row['Ghi chú']) else ''
+            c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
+                      (ho, ten, lop_chinh, ghi_chu, lop))
+        conn.commit()
+        st.success("Đã lưu thay đổi thành công!")  # Đảm bảo thông báo hiển thị
+
 elif menu == "Điểm Danh":
     st.title("Điểm Danh")
     lop = st.selectbox("Chọn lớp", tat_ca_lop)
@@ -167,13 +209,13 @@ elif menu == "Điểm Danh":
         
         buoi = st.selectbox("Chọn buổi", buoi_list)
         
-        # Khởi tạo và tải trạng thái điểm danh từ DB
+        # Khởi tạo session state
         if 'diem_danh_data' not in st.session_state:
             st.session_state['diem_danh_data'] = {}
         if 'ghi_chu_data' not in st.session_state:
             st.session_state['ghi_chu_data'] = {}
         
-        # Tải trạng thái điểm danh từ DB trước khi render
+        # Tải trạng thái điểm danh từ DB
         for hs_id, _, _, _, ghi_chu in hoc_sinh_list:
             st.session_state['ghi_chu_data'][hs_id] = ghi_chu or ""
             for ngay in ngay_list:
@@ -181,7 +223,16 @@ elif menu == "Điểm Danh":
                 c.execute("SELECT trang_thai FROM diem_danh WHERE hoc_sinh_id = ? AND ngay = ? AND buoi = ?",
                           (hs_id, ngay, buoi))
                 trang_thai = c.fetchone()
-                st.session_state['diem_danh_data'][key] = trang_thai[0] if trang_thai else ("Có" if ngay == today and not trang_thai else "")
+                trang_thai = trang_thai[0] if trang_thai else None
+                
+                if ngay == today and trang_thai is None:
+                    trang_thai = "Có"
+                    c.execute("DELETE FROM diem_danh WHERE hoc_sinh_id = ? AND ngay = ? AND buoi = ?",
+                              (hs_id, ngay, buoi))
+                    c.execute("INSERT INTO diem_danh (hoc_sinh_id, ngay, buoi, trang_thai) VALUES (?, ?, ?, ?)",
+                              (hs_id, ngay, buoi, trang_thai))
+                    conn.commit()
+                st.session_state['diem_danh_data'][key] = trang_thai if trang_thai else ""
         
         # Form điểm danh
         with st.form(key="diem_danh_form"):
@@ -237,7 +288,8 @@ elif menu == "Điểm Danh":
         
         # Phần báo cáo trong màn hình điểm danh
         st.subheader("Báo Cáo Điểm Danh")
-        ngay_bao_cao = st.selectbox("Chọn ngày báo cáo", ngay_list, index=ngay_list.index(today) if today in ngay_list else 0)
+        ngay_bao_cao = st.date_input("Chọn ngày báo cáo", value=datetime.now())
+        ngay_bao_cao_str = ngay_bao_cao.strftime('%Y-%m-%d')
         buoi_bao_cao = st.selectbox("Chọn buổi báo cáo", buoi_list)
         
         if st.button("Tạo Báo Cáo"):
@@ -248,7 +300,7 @@ elif menu == "Điểm Danh":
             
             for hs_id, ho, ten, lop_chinh, _ in hoc_sinh_list:
                 c.execute("SELECT trang_thai FROM diem_danh WHERE hoc_sinh_id = ? AND ngay = ? AND buoi = ?",
-                          (hs_id, ngay_bao_cao, buoi_bao_cao))
+                          (hs_id, ngay_bao_cao_str, buoi_bao_cao))
                 tt = c.fetchone()
                 if tt:
                     tt = tt[0]
@@ -259,7 +311,7 @@ elif menu == "Điểm Danh":
                     elif tt == "Đi trễ":
                         di_tre.append(f"{ten} ({lop_chinh})")
             
-            bao_cao = f"Điểm danh lớp {lop} ngày {datetime.strptime(ngay_bao_cao, '%Y-%m-%d').strftime('%d/%m/%Y')}\n"
+            bao_cao = f"Điểm danh lớp {lop} ngày {ngay_bao_cao.strftime('%d/%m/%Y')}\n"
             bao_cao += f"Buổi: {buoi_bao_cao}\n"
             bao_cao += f"Sĩ số: {co_mat}/{tong_so}\n"
             if di_tre:
