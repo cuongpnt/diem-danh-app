@@ -153,33 +153,45 @@ elif menu == "Sửa Danh Sách Lớp":
     lop = st.selectbox("Chọn lớp để sửa", tat_ca_lop)
     loai_lop = get_loai_lop(lop)
     
-    # Khởi tạo session state cho dữ liệu tạm thời
-    if f"edited_df_{lop}" not in st.session_state:
-        c.execute("SELECT id, ho, ten, lop_chinh_thuc, ghi_chu FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
-        data = c.fetchall()
-        if data:
-            st.session_state[f"edited_df_{lop}"] = pd.DataFrame(data, columns=['ID', 'Họ', 'Tên', 'Lớp', 'Ghi chú']).drop(columns=['ID'])
-        else:
-            st.session_state[f"edited_df_{lop}"] = pd.DataFrame(columns=['Họ', 'Tên', 'Lớp', 'Ghi chú'])
+    # Lấy danh sách học sinh hiện tại
+    c.execute("SELECT id, ho, ten, lop_chinh_thuc, ghi_chu FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
+    data = c.fetchall()
     
-    # Sử dụng dữ liệu từ session state
-    edited_df = st.data_editor(st.session_state[f"edited_df_{lop}"], num_rows="dynamic", key=f"editor_{lop}")
-    
-    # Cập nhật session state ngay khi có thay đổi
-    st.session_state[f"edited_df_{lop}"] = edited_df
-    
-    if st.button("Lưu Thay Đổi"):
-        # Lưu vào database
-        c.execute("DELETE FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
-        for _, row in edited_df.iterrows():
-            ho = row['Họ'] if pd.notna(row['Họ']) else ''
-            ten = row['Tên'] if pd.notna(row['Tên']) else ''
-            lop_chinh = row['Lớp'] if loai_lop != 'chinh_thuc' and pd.notna(row['Lớp']) else lop
-            ghi_chu = row['Ghi chú'] if pd.notna(row['Ghi chú']) else ''
-            c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
-                      (ho, ten, lop_chinh, ghi_chu, lop))
-        conn.commit()
-        st.success("Đã lưu thay đổi thành công!")  # Đảm bảo thông báo hiển thị
+    if data:
+        # Nếu có dữ liệu, sử dụng st.data_editor để chỉnh sửa
+        df = pd.DataFrame(data, columns=['ID', 'Họ', 'Tên', 'Lớp', 'Ghi chú'])
+        df = df.drop(columns=['ID'])  # Ẩn cột ID
+        edited_df = st.data_editor(df, num_rows="dynamic", key=f"editor_{lop}")
+        
+        if st.button("Lưu Thay Đổi"):
+            # Đảm bảo dữ liệu được cập nhật trước khi lưu
+            c.execute("DELETE FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
+            for _, row in edited_df.iterrows():
+                ho = row['Họ'] if pd.notna(row['Họ']) else ''
+                ten = row['Tên'] if pd.notna(row['Tên']) else ''
+                lop_chinh = row['Lớp'] if loai_lop != 'chinh_thuc' and pd.notna(row['Lớp']) else lop
+                ghi_chu = row['Ghi chú'] if pd.notna(row['Ghi chú']) else ''
+                c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
+                          (ho, ten, lop_chinh, ghi_chu, lop))
+            conn.commit()
+            st.success("Đã lưu thay đổi thành công!")  # Hiển thị thông báo trước rerun
+            st.rerun()  # Refresh để hiển thị dữ liệu mới
+    else:
+        # Nếu chưa có dữ liệu, tạo bảng mới với st.data_editor
+        df = pd.DataFrame(columns=['Họ', 'Tên', 'Lớp', 'Ghi chú'])
+        edited_df = st.data_editor(df, num_rows="dynamic", key=f"editor_{lop}")
+        
+        if st.button("Lưu Danh Sách"):
+            for _, row in edited_df.iterrows():
+                ho = row['Họ'] if pd.notna(row['Họ']) else ''
+                ten = row['Tên'] if pd.notna(row['Tên']) else ''
+                lop_chinh = row['Lớp'] if loai_lop != 'chinh_thuc' and pd.notna(row['Lớp']) else lop
+                ghi_chu = row['Ghi chú'] if pd.notna(row['Ghi chú']) else ''
+                c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
+                          (ho, ten, lop_chinh, ghi_chu, lop))
+            conn.commit()
+            st.success("Đã lưu danh sách mới thành công!")  # Hiển thị thông báo trước rerun
+            st.rerun()  # Refresh để hiển thị dữ liệu mới
 
 elif menu == "Điểm Danh":
     st.title("Điểm Danh")
