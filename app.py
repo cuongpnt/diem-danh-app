@@ -328,10 +328,24 @@ elif menu == "Điểm Danh":
                 bao_cao += f"Vắng: {', '.join(vang)}\n"
             
             st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
-            # Thêm nút copy bằng HTML/JavaScript
+            # Thêm nút copy bằng HTML/JavaScript với textarea ID
             st.markdown(
                 f"""
-                <button onclick="navigator.clipboard.writeText(document.getElementById('report_text').value); alert('Đã copy báo cáo!');">Copy Báo Cáo</button>
+                <script>
+                function copyToClipboard() {{
+                    var text = document.getElementById('report_text').value;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {{
+                        navigator.clipboard.writeText(text).then(() => {{
+                            alert('Đã copy báo cáo vào clipboard!');
+                        }}).catch(err => {{
+                            alert('Lỗi khi copy: ' + err);
+                        }});
+                    }} else {{
+                        alert('Trình duyệt không hỗ trợ copy clipboard.');
+                    }}
+                }}
+                </script>
+                <button onclick="copyToClipboard()">Copy Báo Cáo</button>
                 """,
                 unsafe_allow_html=True
             )
@@ -374,10 +388,24 @@ elif menu == "Báo Cáo":
             bao_cao += f"Vắng: {', '.join(vang)}\n"
         
         st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
-        # Thêm nút copy bằng HTML/JavaScript
+        # Thêm nút copy bằng HTML/JavaScript với textarea ID
         st.markdown(
             f"""
-            <button onclick="navigator.clipboard.writeText(document.getElementById('report_text').value); alert('Đã copy báo cáo!');">Copy Báo Cáo</button>
+            <script>
+            function copyToClipboard() {{
+                var text = document.getElementById('report_text').value;
+                if (navigator.clipboard && navigator.clipboard.writeText) {{
+                    navigator.clipboard.writeText(text).then(() => {{
+                        alert('Đã copy báo cáo vào clipboard!');
+                    }}).catch(err => {{
+                        alert('Lỗi khi copy: ' + err);
+                    }});
+                }} else {{
+                    alert('Trình duyệt không hỗ trợ copy clipboard.');
+                }}
+            }}
+            </script>
+            <button onclick="copyToClipboard()">Copy Báo Cáo</button>
             """,
             unsafe_allow_html=True
         )
