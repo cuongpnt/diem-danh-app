@@ -3,8 +3,6 @@ import pandas as pd
 import sqlite3
 from datetime import datetime, timedelta
 import os
-import io
-import shutil
 
 # Kết nối database SQLite
 conn = sqlite3.connect('diem_danh.db')
@@ -108,7 +106,7 @@ st.markdown("""
 
 # Sidebar menu
 st.sidebar.title("Menu")
-menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Sửa Danh Sách Lớp", "Điểm Danh", "Báo Cáo", "Backup/Restore"], index=2)
+menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Sửa Danh Sách Lớp", "Điểm Danh", "Báo Cáo"], index=2)
 
 if menu == "Import Dữ Liệu":
     st.title("Import Dữ Liệu Học Sinh")
@@ -174,8 +172,7 @@ elif menu == "Sửa Danh Sách Lớp":
                 c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
                           (ho, ten, lop_chinh, ghi_chu, lop))
             conn.commit()
-            st.success("Đã lưu thay đổi thành công!")  # Hiển thị thông báo trước rerun
-            st.rerun()  # Refresh để hiển thị dữ liệu mới
+            st.success("Đã lưu thay đổi thành công!")  # Hiển thị thông báo
     else:
         # Nếu chưa có dữ liệu, tạo bảng mới với st.data_editor
         df = pd.DataFrame(columns=['Họ', 'Tên', 'Lớp', 'Ghi chú'])
@@ -190,8 +187,7 @@ elif menu == "Sửa Danh Sách Lớp":
                 c.execute("INSERT INTO hoc_sinh (ho, ten, lop_chinh_thuc, ghi_chu, lop_diem_danh) VALUES (?, ?, ?, ?, ?)",
                           (ho, ten, lop_chinh, ghi_chu, lop))
             conn.commit()
-            st.success("Đã lưu danh sách mới thành công!")  # Hiển thị thông báo trước rerun
-            st.rerun()  # Refresh để hiển thị dữ liệu mới
+            st.success("Đã lưu danh sách mới thành công!")  # Hiển thị thông báo
 
 elif menu == "Điểm Danh":
     st.title("Điểm Danh")
