@@ -327,9 +327,14 @@ elif menu == "Điểm Danh":
             if vang:
                 bao_cao += f"Vắng: {', '.join(vang)}\n"
             
-            st.text_area("Nội dung báo cáo", bao_cao, height=200)
-            if st.button("Copy Báo Cáo"):
-                st.write("Đã copy! (Sử dụng Ctrl+C để dán)")
+            st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
+            # Thêm nút copy bằng HTML/JavaScript
+            st.markdown(
+                f"""
+                <button onclick="navigator.clipboard.writeText(document.getElementById('report_text').value); alert('Đã copy báo cáo!');">Copy Báo Cáo</button>
+                """,
+                unsafe_allow_html=True
+            )
 
 elif menu == "Báo Cáo":
     st.title("Báo Cáo Điểm Danh")
@@ -368,6 +373,11 @@ elif menu == "Báo Cáo":
         if vang:
             bao_cao += f"Vắng: {', '.join(vang)}\n"
         
-        st.text_area("Nội dung báo cáo", bao_cao, height=200)
-        if st.button("Copy Báo Cáo"):
-            st.write("Đã copy! (Sử dụng Ctrl+C để dán)")
+        st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
+        # Thêm nút copy bằng HTML/JavaScript
+        st.markdown(
+            f"""
+            <button onclick="navigator.clipboard.writeText(document.getElementById('report_text').value); alert('Đã copy báo cáo!');">Copy Báo Cáo</button>
+            """,
+            unsafe_allow_html=True
+        )
