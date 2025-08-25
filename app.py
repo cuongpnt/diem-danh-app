@@ -15,6 +15,8 @@ c.execute('''CREATE TABLE IF NOT EXISTS hoc_sinh
              (id INTEGER PRIMARY KEY AUTOINCREMENT, ho TEXT, ten TEXT, lop_chinh_thuc TEXT, ghi_chu TEXT, lop_diem_danh TEXT)''')
 c.execute('''CREATE TABLE IF NOT EXISTS diem_danh 
              (hoc_sinh_id INTEGER, ngay TEXT, buoi TEXT, trang_thai TEXT)''')
+c.execute('''CREATE TABLE IF NOT EXISTS diem_danh_cuoi_tuan 
+             (hoc_sinh_id INTEGER, ngay TEXT, trang_thai TEXT)''')  # Bảng mới cho điểm danh cuối tuần
 conn.commit()
 
 # Danh sách lớp cố định
@@ -38,11 +40,30 @@ def get_loai_lop(lop):
         return 'ban_tru'
     return None
 
-# Hàm lấy 3 ngày: hôm nay và 2 ngày trước
-def get_3_ngay_truoc():
+# Hàm lấy 3 ngày: hôm nay và 2 ngày trước, loại bỏ thứ 7 và CN cho bán trú
+def get_3_ngay_truoc(loai_lop):
     today = datetime.now()
-    days = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(2, -1, -1)]
-    return days
+    days = []
+    i = 0
+    while len(days) < 3:
+        day = today - timedelta(days=i)
+        weekday = day.weekday()
+        if loai_lop == 'ban_tru' and weekday in [5, 6]:  # Thứ 7 (5), CN (6)
+            i += 1
+            continue
+        days.append(day.strftime('%Y-%m-%d'))
+        i += 1
+    return days[::-1]  # Đảo ngược để ngày cũ trước
+
+# Hàm lấy cuối tuần (thứ 7, CN) cho nội trú
+def get_cuoi_tuan():
+    today = datetime.now()
+    weekday = today.weekday()
+    if weekday == 5:  # Thứ 7
+        return [today.strftime('%Y-%m-%d')]
+    elif weekday == 6:  # CN
+        return [today.strftime('%Y-%m-%d')]
+    return []
 
 # Hàm tính số tuần theo ISO và danh sách tuần
 def get_tuan_options():
@@ -106,7 +127,7 @@ st.markdown("""
 
 # Sidebar menu
 st.sidebar.title("Menu")
-menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Sửa Danh Sách Lớp", "Điểm Danh", "Báo Cáo"], index=2)
+menu = st.sidebar.selectbox("Chọn tính năng", ["Import Dữ Liệu", "Sửa Danh Sách Lớp", "Điểm Danh", "Điểm Danh Cuối Tuần", "Báo Cáo"], index=2)
 
 if menu == "Import Dữ Liệu":
     st.title("Import Dữ Liệu Học Sinh")
@@ -205,7 +226,7 @@ elif menu == "Điểm Danh":
         tuan_options = get_tuan_options()
         selected_tuan = st.selectbox("Chọn tuần", [label for _, label in tuan_options], index=0)
         tuan_offset = [offset for offset, label in tuan_options if label == selected_tuan][0]
-        ngay_list = get_3_ngay_truoc()  # Chỉ 3 ngày
+        ngay_list = get_3_ngay_truoc(loai_lop)  # Chỉ 3 ngày, tùy loại lớp
         today = datetime.now().strftime('%Y-%m-%d')
         
         if loai_lop == 'chinh_thuc':
@@ -231,7 +252,7 @@ elif menu == "Điểm Danh":
                 c.execute("SELECT trang_thai FROM diem_danh WHERE hoc_sinh_id = ? AND ngay = ? AND buoi = ?",
                           (hs_id, ngay, buoi))
                 trang_thai = c.fetchone()
-                trang_thai = trang_thai[0] if trang_thai else None
+                st.session_state['diem_danh_data'][key] = trang_thai[0] if trang_thai else None
                 
                 if ngay == today and trang_thai is None:
                     trang_thai = "Có"
@@ -240,7 +261,6 @@ elif menu == "Điểm Danh":
                     c.execute("INSERT INTO diem_danh (hoc_sinh_id, ngay, buoi, trang_thai) VALUES (?, ?, ?, ?)",
                               (hs_id, ngay, buoi, trang_thai))
                     conn.commit()
-                st.session_state['diem_danh_data'][key] = trang_thai if trang_thai else ""
         
         # Form điểm danh
         with st.form(key="diem_danh_form"):
@@ -328,7 +348,6 @@ elif menu == "Điểm Danh":
                 bao_cao += f"Vắng: {', '.join(vang)}\n"
             
             st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
-            # Thêm nút copy bằng HTML/JavaScript với textarea ID
             st.markdown(
                 f"""
                 <script>
@@ -349,6 +368,77 @@ elif menu == "Điểm Danh":
                 """,
                 unsafe_allow_html=True
             )
+
+elif menu == "Điểm Danh Cuối Tuần":
+    st.title("Điểm Danh Cuối Tuần")
+    lop = st.selectbox("Chọn lớp", lop_noi_tru)  # Chỉ áp dụng cho nội trú
+    loai_lop = get_loai_lop(lop)
+    
+    if not loai_lop == 'noi_tru':
+        st.warning("Chức năng này chỉ áp dụng cho lớp nội trú.")
+    else:
+        # Lấy học sinh
+        c.execute("SELECT id, ho, ten, lop_chinh_thuc, ghi_chu FROM hoc_sinh WHERE lop_diem_danh = ?", (lop,))
+        hoc_sinh_list = c.fetchall()
+        
+        if not hoc_sinh_list:
+            st.warning("Lớp chưa có dữ liệu. Hãy import trước.")
+        else:
+            # Lấy ngày cuối tuần
+            ngay_list = get_cuoi_tuan()
+            if not ngay_list:
+                st.warning("Hôm nay không phải cuối tuần (thứ 7 hoặc CN).")
+            else:
+                # Khởi tạo session state
+                if 'diem_danh_cuoi_tuan_data' not in st.session_state:
+                    st.session_state['diem_danh_cuoi_tuan_data'] = {}
+                
+                # Tải trạng thái điểm danh từ DB
+                for hs_id, _, _, _, _ in hoc_sinh_list:
+                    key = f"{hs_id}_{ngay_list[0]}"
+                    c.execute("SELECT trang_thai FROM diem_danh_cuoi_tuan WHERE hoc_sinh_id = ? AND ngay = ?",
+                              (hs_id, ngay_list[0]))
+                    trang_thai = c.fetchone()
+                    st.session_state['diem_danh_cuoi_tuan_data'][key] = trang_thai[0] if trang_thai else None
+                
+                # Form điểm danh cuối tuần
+                with st.form(key="diem_danh_cuoi_tuan_form"):
+                    st.subheader("Bảng điểm danh cuối tuần")
+                    cols = st.columns([1, 2, 2, 2] + [2] * len(ngay_list))
+                    cols[0].write("STT")
+                    cols[1].write("Họ")
+                    cols[2].write("Tên")
+                    cols[3].write("Lớp")
+                    for i, ngay in enumerate(ngay_list, 4):
+                        cols[i].write(datetime.strptime(ngay, '%Y-%m-%d').strftime('%d/%m'))
+                    
+                    for idx, (hs_id, ho, ten, lop_chinh, _) in enumerate(hoc_sinh_list, 1):
+                        cols = st.columns([1, 2, 2, 2] + [2] * len(ngay_list))
+                        cols[0].write(idx)
+                        cols[1].write(ho)
+                        cols[2].write(ten)
+                        cols[3].write(lop_chinh)
+                        
+                        for i, ngay in enumerate(ngay_list, 4):
+                            key = f"{hs_id}_{ngay}"
+                            default = st.session_state['diem_danh_cuoi_tuan_data'].get(key, "")
+                            options = ["Ở lại", "Về"]
+                            st.session_state['diem_danh_cuoi_tuan_data'][key] = cols[i].selectbox(
+                                " ", options,
+                                index=options.index(default) if default in options else 0,
+                                key=key
+                            )
+                    
+                    if st.form_submit_button("Save"):
+                        for key, trang_thai in st.session_state['diem_danh_cuoi_tuan_data'].items():
+                            hs_id, ngay = key.split('_')
+                            c.execute("DELETE FROM diem_danh_cuoi_tuan WHERE hoc_sinh_id = ? AND ngay = ?",
+                                      (hs_id, ngay))
+                            c.execute("INSERT INTO diem_danh_cuoi_tuan (hoc_sinh_id, ngay, trang_thai) VALUES (?, ?, ?)",
+                                      (hs_id, ngay, trang_thai))
+                        conn.commit()
+                        st.success("Đã lưu điểm danh cuối tuần!")
+                        st.session_state['diem_danh_cuoi_tuan_data'] = {}
 
 elif menu == "Báo Cáo":
     st.title("Báo Cáo Điểm Danh")
@@ -388,7 +478,6 @@ elif menu == "Báo Cáo":
             bao_cao += f"Vắng: {', '.join(vang)}\n"
         
         st.text_area("Nội dung báo cáo", bao_cao, height=200, key="report_text")
-        # Thêm nút copy bằng HTML/JavaScript với textarea ID
         st.markdown(
             f"""
             <script>
